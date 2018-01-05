@@ -12,6 +12,10 @@
     <artifactId>quote-service</artifactId>
     <name>GDAX Quote Service</name>
 
+    <properties>
+        <capsule.maven.plugin.version>1.5.1</capsule.maven.plugin.version>
+    </properties>
+
     <dependencies>
 
         <dependency>
@@ -165,6 +169,22 @@
                             <inputSpec>${project.build.directory}/generated-sources/api.yaml</inputSpec>                            <output>target/generated-sources</output>
                             <language>html</language>
                             <output>${project.build.directory}/classes/static</output>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>com.github.chrisdchristo</groupId>
+                <artifactId>capsule-maven-plugin</artifactId>
+                <version>${capsule.maven.plugin.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>build</goal>
+                        </goals>
+                        <configuration>
+                            <appClass>quote.service.Main</appClass>
+                            <type>fat</type>
                         </configuration>
                     </execution>
                 </executions>

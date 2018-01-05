@@ -5,27 +5,25 @@ import api.gdax.client.Level;
 import api.gdax.model.Order;
 import api.gdax.model.OrderBook;
 import com.google.common.annotations.VisibleForTesting;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
+import javax.validation.Valid;
+import javax.ws.rs.BadRequestException;
+import javax.ws.rs.ServiceUnavailableException;
+import javax.ws.rs.core.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import quote.service.model.QuoteRequest;
 import quote.service.model.QuoteResponse;
 import retrofit2.Call;
 
-import javax.validation.Valid;
-import javax.ws.rs.BadRequestException;
-import javax.ws.rs.ServiceUnavailableException;
-import javax.ws.rs.core.Response;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.List;
-
 /**
- * Implementation of the QuoteApi
- * This is a somewhat simple implementation of the API requested. It is simple in that it caches
- * the currency pairs on startup once.
- * */
+ * Implementation of the QuoteApi This is a somewhat simple implementation of the API requested. It
+ * is simple in that it caches the currency pairs on startup once.
+ */
 public class QuoteApi extends quote.service.api.QuoteApi {
 
   private static final Logger LOG = LoggerFactory.getLogger(QuoteApi.class);
@@ -35,7 +33,6 @@ public class QuoteApi extends quote.service.api.QuoteApi {
   public QuoteApi(GdaxClient gdaxClient) {
     this.gdaxClient = gdaxClient;
   }
-
 
   /**
    * Your service will handle requests to buy or sell a particular amount of a currency (the base
@@ -52,19 +49,23 @@ public class QuoteApi extends quote.service.api.QuoteApi {
       throw new BadRequestException("You must provide a quote request.");
     }
 
-    //Step 1. Collect the order book, if its anything return BadRequest with the propagated message
     String baseCurrency = request.getBaseCurrency();
     String quoteCurrency = request.getQuoteCurrency();
+    //amount to purchase in base currency
     BigDecimal amount = request.getAmount();
     QuoteRequest.ActionEnum action = request.getAction();
 
     //if the reverse currency pair exists, swap the action
     final OrderBook orderBook;
-    if (!hasCurrencyPair(baseCurrency, quoteCurrency) && hasCurrencyPair(quoteCurrency, baseCurrency)) {
+    final boolean isSwapped;
+    if (!hasCurrencyPair(baseCurrency, quoteCurrency)
+        && hasCurrencyPair(quoteCurrency, baseCurrency)) {
       action = swapAction(action);
       orderBook = collectOrderBook(quoteCurrency, baseCurrency);
+      isSwapped = true;
     } else {
       orderBook = collectOrderBook(baseCurrency, quoteCurrency);
+      isSwapped = false;
     }
 
     /**
@@ -80,14 +81,16 @@ public class QuoteApi extends quote.service.api.QuoteApi {
     List<Order> orders = getOrderBookList(action, orderBook);
     for (int i = 0; i < orders.size(); i++) {
       Order order = orders.get(i);
-      BigDecimal price = order.getPrice();
+      BigDecimal quoteCurrencyPrice = isSwapped ? order.getPrice() : BigDecimal.ONE;
+      BigDecimal baseCurrencyPrice = isSwapped ? BigDecimal.ONE : order.getPrice();
       //A item can have multiple orders for a given size/quantity
       BigDecimal totalShares = order.getSize().multiply(BigDecimal.valueOf(order.getQuantity()));
-      BigDecimal usedShares = amount.min(totalShares);
+      BigDecimal purchaseableShares = amount.divide(quoteCurrencyPrice, 8, RoundingMode.HALF_UP);
+      BigDecimal usedShares = purchaseableShares.min(totalShares);
       //update our amount for the next iteration
       usedQuantity = usedQuantity.add(usedShares);
-      weightAveragePrice = weightAveragePrice.add(price.multiply(usedShares));
-      if (usedQuantity.equals(amount)) {
+      weightAveragePrice = weightAveragePrice.add(baseCurrencyPrice.multiply(quoteCurrencyPrice.multiply(usedShares)));
+      if (usedQuantity.equals(purchaseableShares)) {
         break;
       }
     }
@@ -99,7 +102,9 @@ public class QuoteApi extends quote.service.api.QuoteApi {
   }
 
   private QuoteRequest.ActionEnum swapAction(QuoteRequest.ActionEnum action) {
-    return action == QuoteRequest.ActionEnum.BUY ? QuoteRequest.ActionEnum.SELL : QuoteRequest.ActionEnum.BUY;
+    return action == QuoteRequest.ActionEnum.BUY
+        ? QuoteRequest.ActionEnum.SELL
+        : QuoteRequest.ActionEnum.BUY;
   }
 
   private List<Order> getOrderBookList(QuoteRequest.ActionEnum action, OrderBook orderBook) {
@@ -131,6 +136,7 @@ public class QuoteApi extends quote.service.api.QuoteApi {
 
   /**
    * Determine if a currency pair exists by trying to fetch an OrderBook
+   *
    * @throws ServiceUnavailableException if something other than 200 or 404 is returned
    */
   @VisibleForTesting
@@ -144,13 +150,11 @@ public class QuoteApi extends quote.service.api.QuoteApi {
           return false;
         }
         throw new ServiceUnavailableException(
-                "An unforeseen exception was encountered talking to gdax.");
+            "An unforeseen exception was encountered talking to gdax.");
       }
       return true;
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }
-
   }
-
 }

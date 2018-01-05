@@ -1,14 +1,13 @@
 package api.gdax.client;
 
 import api.gdax.model.OrderBook;
+import java.util.List;
 import retrofit2.Call;
 import retrofit2.Retrofit;
 import retrofit2.converter.jackson.JacksonConverterFactory;
 import retrofit2.http.GET;
 import retrofit2.http.Path;
 import retrofit2.http.Query;
-
-import java.util.List;
 
 /**
  * A minimal retrofit service to communicate with GDAX for the purpose of this assignment. The main

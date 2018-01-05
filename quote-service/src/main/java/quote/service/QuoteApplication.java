@@ -1,14 +1,13 @@
 package quote.service;
 
-import api.gdax.client.GdaxClient;
-import org.glassfish.jersey.logging.LoggingFeature;
-import org.glassfish.jersey.server.ResourceConfig;
+import static quote.service.QuoteApplication.BASE_PATH;
 
-import javax.ws.rs.ApplicationPath;
+import api.gdax.client.GdaxClient;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import static quote.service.QuoteApplication.BASE_PATH;
+import javax.ws.rs.ApplicationPath;
+import org.glassfish.jersey.logging.LoggingFeature;
+import org.glassfish.jersey.server.ResourceConfig;
 
 /** JAX-RS Application that is used to find all resources */
 @ApplicationPath(BASE_PATH)

@@ -1,28 +1,41 @@
 package quote.service;
 
-import java.io.IOException;
-import java.math.BigDecimal;
-import java.util.List;
-import javax.validation.Valid;
-import javax.ws.rs.BadRequestException;
-import javax.ws.rs.ServiceUnavailableException;
-import javax.ws.rs.core.Response;
+import api.gdax.client.GdaxClient;
+import api.gdax.client.Level;
+import api.gdax.model.Order;
+import api.gdax.model.OrderBook;
+import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import quote.service.model.QuoteRequest;
 import quote.service.model.QuoteResponse;
 import retrofit2.Call;
 
-/** Implementation of the QuoteApi */
+import javax.validation.Valid;
+import javax.ws.rs.BadRequestException;
+import javax.ws.rs.ServiceUnavailableException;
+import javax.ws.rs.core.Response;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
+
+/**
+ * Implementation of the QuoteApi
+ * This is a somewhat simple implementation of the API requested. It is simple in that it caches
+ * the currency pairs on startup once.
+ * */
 public class QuoteApi extends quote.service.api.QuoteApi {
 
   private static final Logger LOG = LoggerFactory.getLogger(QuoteApi.class);
 
-  private final GdaxService gdaxClient;
+  private final GdaxClient gdaxClient;
 
-  public QuoteApi(GdaxService gdaxClient) {
+  public QuoteApi(GdaxClient gdaxClient) {
     this.gdaxClient = gdaxClient;
   }
+
 
   /**
    * Your service will handle requests to buy or sell a particular amount of a currency (the base
@@ -43,7 +56,16 @@ public class QuoteApi extends quote.service.api.QuoteApi {
     String baseCurrency = request.getBaseCurrency();
     String quoteCurrency = request.getQuoteCurrency();
     BigDecimal amount = request.getAmount();
-    GdaxService.OrderBook orderBook = collectOrderBook(baseCurrency, quoteCurrency);
+    QuoteRequest.ActionEnum action = request.getAction();
+
+    //if the reverse currency pair exists, swap the action
+    final OrderBook orderBook;
+    if (!hasCurrencyPair(baseCurrency, quoteCurrency) && hasCurrencyPair(quoteCurrency, baseCurrency)) {
+      action = swapAction(action);
+      orderBook = collectOrderBook(quoteCurrency, baseCurrency);
+    } else {
+      orderBook = collectOrderBook(baseCurrency, quoteCurrency);
+    }
 
     /**
      * For a buy action, we simply walk the sell bids in order taking as much as possible until
@@ -55,12 +77,12 @@ public class QuoteApi extends quote.service.api.QuoteApi {
     //bids are ordered in descending, highest price first
     //asks are ordered in ascending, lowest price first
     //in both cases we want to iterate in order 0..N
-    List<GdaxService.Item> items = getOrderBookList(request.getAction(), orderBook);
-    for (int i = 0; i < items.size(); i++) {
-      GdaxService.Item item = items.get(i);
-      BigDecimal price = item.getPrice();
+    List<Order> orders = getOrderBookList(action, orderBook);
+    for (int i = 0; i < orders.size(); i++) {
+      Order order = orders.get(i);
+      BigDecimal price = order.getPrice();
       //A item can have multiple orders for a given size/quantity
-      BigDecimal totalShares = item.getSize().multiply(BigDecimal.valueOf(item.getOrders()));
+      BigDecimal totalShares = order.getSize().multiply(BigDecimal.valueOf(order.getQuantity()));
       BigDecimal usedShares = amount.min(totalShares);
       //update our amount for the next iteration
       usedQuantity = usedQuantity.add(usedShares);
@@ -69,15 +91,18 @@ public class QuoteApi extends quote.service.api.QuoteApi {
         break;
       }
     }
-    weightAveragePrice = weightAveragePrice.divide(usedQuantity);
+    weightAveragePrice = weightAveragePrice.divide(usedQuantity, RoundingMode.HALF_UP);
 
     QuoteResponse response =
         new QuoteResponse().currency(quoteCurrency).total(usedQuantity).price(weightAveragePrice);
     return Response.ok().entity(response).build();
   }
 
-  private List<GdaxService.Item> getOrderBookList(
-      QuoteRequest.ActionEnum action, GdaxService.OrderBook orderBook) {
+  private QuoteRequest.ActionEnum swapAction(QuoteRequest.ActionEnum action) {
+    return action == QuoteRequest.ActionEnum.BUY ? QuoteRequest.ActionEnum.SELL : QuoteRequest.ActionEnum.BUY;
+  }
+
+  private List<Order> getOrderBookList(QuoteRequest.ActionEnum action, OrderBook orderBook) {
     return action == QuoteRequest.ActionEnum.BUY ? orderBook.getBids() : orderBook.getAsks();
   }
   /**
@@ -87,11 +112,10 @@ public class QuoteApi extends quote.service.api.QuoteApi {
    * @throws BadRequestException if currencies don't exist
    * @throws ServiceUnavailableException if gdax spits any error
    */
-  private GdaxService.OrderBook collectOrderBook(String baseCurrency, String quoteCurrency) {
+  private OrderBook collectOrderBook(String baseCurrency, String quoteCurrency) {
     try {
-      Call<GdaxService.OrderBook> call =
-          gdaxClient.getProductOrderBook(baseCurrency, quoteCurrency, 2);
-      retrofit2.Response<GdaxService.OrderBook> response = call.execute();
+      Call<OrderBook> call = gdaxClient.getProductOrderBook(baseCurrency, quoteCurrency, Level.TWO);
+      retrofit2.Response<OrderBook> response = call.execute();
       if (!response.isSuccessful()) {
         if (Response.Status.fromStatusCode(response.code()) == Response.Status.NOT_FOUND) {
           throw new BadRequestException("No order book for the provided currencies.");
@@ -104,4 +128,29 @@ public class QuoteApi extends quote.service.api.QuoteApi {
       throw new BadRequestException(e);
     }
   }
+
+  /**
+   * Determine if a currency pair exists by trying to fetch an OrderBook
+   * @throws ServiceUnavailableException if something other than 200 or 404 is returned
+   */
+  @VisibleForTesting
+  boolean hasCurrencyPair(String baseCurrency, String quoteCurrency) {
+    try {
+      //we use level 1 to transmit less data
+      Call<OrderBook> call = gdaxClient.getProductOrderBook(baseCurrency, quoteCurrency, Level.ONE);
+      retrofit2.Response<OrderBook> response = call.execute();
+      if (!response.isSuccessful()) {
+        if (Response.Status.fromStatusCode(response.code()) == Response.Status.NOT_FOUND) {
+          return false;
+        }
+        throw new ServiceUnavailableException(
+                "An unforeseen exception was encountered talking to gdax.");
+      }
+      return true;
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+
+  }
+
 }

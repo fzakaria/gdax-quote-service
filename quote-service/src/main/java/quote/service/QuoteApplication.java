@@ -1,12 +1,14 @@
 package quote.service;
 
-import static quote.service.QuoteApplication.BASE_PATH;
-
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import javax.ws.rs.ApplicationPath;
+import api.gdax.client.GdaxClient;
 import org.glassfish.jersey.logging.LoggingFeature;
 import org.glassfish.jersey.server.ResourceConfig;
+
+import javax.ws.rs.ApplicationPath;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import static quote.service.QuoteApplication.BASE_PATH;
 
 /** JAX-RS Application that is used to find all resources */
 @ApplicationPath(BASE_PATH)
@@ -16,7 +18,7 @@ public class QuoteApplication extends ResourceConfig {
 
   public QuoteApplication() {
     //perform any dependency inversion here
-    GdaxService gdaxClient = GdaxService.client();
+    GdaxClient gdaxClient = GdaxClient.defaultClient();
     quote.service.api.QuoteApi quoteApi = new QuoteApi(gdaxClient);
     registerInstances(quoteApi);
     register(ExceptionMappers.WebApplicationExceptionMapper.class);
@@ -26,7 +28,8 @@ public class QuoteApplication extends ResourceConfig {
         new LoggingFeature(
             Logger.getLogger(LoggingFeature.DEFAULT_LOGGER_NAME),
             Level.INFO,
-            LoggingFeature.Verbosity.PAYLOAD_ANY, 1024));
+            LoggingFeature.Verbosity.PAYLOAD_ANY,
+            1024));
     property(
         LoggingFeature.LOGGING_FEATURE_VERBOSITY_SERVER, LoggingFeature.Verbosity.PAYLOAD_TEXT);
     property(LoggingFeature.LOGGING_FEATURE_LOGGER_LEVEL_SERVER, Level.INFO);

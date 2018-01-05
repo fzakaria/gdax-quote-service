@@ -4,8 +4,10 @@
     version: "1.0.0"
     title: "GDAX Quote Service"
     description: "A service to find the best quotes from GDAX"
+    url: "https://www.gdax.com/"
     contact:
       name: "Farid Zakaria"
+      email: "farid.m.zakaria@gmail.com"
     license:
       name: "MIT"
   host: "localhost"
@@ -21,7 +23,7 @@
       description: A service that uses GDAX to find best quotes.
   paths:
     /quote:
-      get:
+      post:
         operationId: getQuote
         tags:
           - quoteService
@@ -40,12 +42,22 @@
               $ref: "#/definitions/QuoteRequest"
         responses:
           "200":
-            description: "A list of pets."
+            description: "A quote."
             schema:
-              type: "array"
-              items:
-                $ref: "#/definitions/QuoteResponse"
+              $ref: "#/definitions/QuoteResponse"
+          "400":
+            description: "An error."
+            schmea:
+              $ref: "#/definitions/Error"
+
   definitions:
+    Error:
+      type: "object"
+      required:
+        - "message"
+      properties:
+        message:
+          type: "string"
     QuoteResponse:
       type: "object"
       required:
@@ -69,7 +81,7 @@
       properties:
         action:
           type: "string"
-          enum: ["buy", "sell"]
+          enum: ["BUY", "SELL"]
         base_currency:
           type: "string"
         quote_currency:

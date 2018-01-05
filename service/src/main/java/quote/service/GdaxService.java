@@ -35,13 +35,13 @@ public interface GdaxService {
 
   @JsonFormat(shape = JsonFormat.Shape.ARRAY)
   @JsonPropertyOrder({"price", "size", "orders"})
-  class Bid {
+  class Item {
     private final BigDecimal price;
     private final BigDecimal size;
     private final long orders;
 
     @JsonCreator
-    public Bid(
+    public Item(
         @JsonProperty("price") BigDecimal price,
         @JsonProperty("size") BigDecimal size,
         @JsonProperty("orders") long orders) {
@@ -66,7 +66,7 @@ public interface GdaxService {
     public boolean equals(Object o) {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
-      Bid bid = (Bid) o;
+      Item bid = (Item) o;
       return orders == bid.orders
           && Objects.equals(price, bid.price)
           && Objects.equals(size, bid.size);
@@ -81,14 +81,14 @@ public interface GdaxService {
   class OrderBook {
 
     private final String sequence;
-    private final List<Bid> bids;
-    private final List<Bid> asks;
+    private final List<Item> bids;
+    private final List<Item> asks;
 
     @JsonCreator
     public OrderBook(
         @JsonProperty("sequence") String sequence,
-        @JsonProperty("bids") List<Bid> bids,
-        @JsonProperty("asks") List<Bid> asks) {
+        @JsonProperty("bids") List<Item> bids,
+        @JsonProperty("asks") List<Item> asks) {
       this.sequence = sequence;
       this.bids = bids;
       this.asks = asks;
@@ -98,11 +98,11 @@ public interface GdaxService {
       return sequence;
     }
 
-    public List<Bid> getBids() {
+    public List<Item> getBids() {
       return bids;
     }
 
-    public List<Bid> getAsks() {
+    public List<Item> getAsks() {
       return asks;
     }
 
@@ -122,7 +122,9 @@ public interface GdaxService {
     }
   }
 
-  @GET("/products/{product-id}/book")
+  @GET("/products/{baseCurrency}-{quoteCurrency}/book")
   Call<OrderBook> getProductOrderBook(
-      @Path("product-id") String productId, @Query("level") int level);
+      @Path("baseCurrency") String baseCurrency,
+      @Path("quoteCurrency") String quoteCurrency,
+      @Query("level") int level);
 }

@@ -1,0 +1,78 @@
+---
+  swagger: "2.0"
+  info:
+    version: "1.0.0"
+    title: "GDAX Quote Service"
+    description: "A service to find the best quotes from GDAX"
+    contact:
+      name: "Farid Zakaria"
+    license:
+      name: "MIT"
+  host: "localhost"
+  basePath: "/"
+  schemes:
+    - "http"
+  consumes:
+    - "application/json"
+  produces:
+    - "application/json"
+  tags:
+    - name: quoteService
+      description: A service that uses GDAX to find best quotes.
+  paths:
+    /quote:
+      get:
+        operationId: getQuote
+        tags:
+          - quoteService
+        description: "Quote trades between any two currencies that GDAX has an orderbook for."
+        produces:
+          - "application/json"
+        consumes:
+          - "application/json"
+        parameters:
+          -
+            name: "request"
+            in: "body"
+            description: "Determine the quote for the target currency"
+            required: true
+            schema:
+              $ref: "#/definitions/QuoteRequest"
+        responses:
+          "200":
+            description: "A list of pets."
+            schema:
+              type: "array"
+              items:
+                $ref: "#/definitions/QuoteResponse"
+  definitions:
+    QuoteResponse:
+      type: "object"
+      required:
+        - "price"
+        - "total"
+        - "currency"
+      properties:
+        price:
+          type: "number"
+        total:
+          type: "number"
+        currency:
+          type: "string"
+    QuoteRequest:
+      type: "object"
+      required:
+        - "action"
+        - "base_currency"
+        - "quote_currency"
+        - "amount"
+      properties:
+        action:
+          type: "string"
+          enum: ["buy", "sell"]
+        base_currency:
+          type: "string"
+        quote_currency:
+          type: "string"
+        amount:
+          type: "number"

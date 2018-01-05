@@ -1,23 +1,22 @@
 package quote.service;
 
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
+import static quote.service.QuoteApplication.BASE_PATH;
+
+import javax.ws.rs.ApplicationPath;
+import org.glassfish.jersey.server.ResourceConfig;
 
 /** JAX-RS Application that is used to find all resources */
-public class QuoteApplication extends RestApplication {
+@ApplicationPath(BASE_PATH)
+public class QuoteApplication extends ResourceConfig {
 
-  private final Set<Class<?>> classes;
+  public static final String BASE_PATH = "/";
 
   public QuoteApplication() {
-    HashSet<Class<?>> c = new HashSet<>();
-    c.add(QuoteApi.class);
-    c.add(WebApplicationExceptionMapper.class);
-    classes = Collections.unmodifiableSet(c);
-  }
+    //perform any dependency inversion here
+    GdaxService gdaxClient = GdaxService.client();
+    quote.service.api.QuoteApi quoteApi = new QuoteApi(gdaxClient);
+    registerInstances(quoteApi);
 
-  @Override
-  public Set<Class<?>> getClasses() {
-    return classes;
+    register(WebApplicationExceptionMapper.class);
   }
 }
